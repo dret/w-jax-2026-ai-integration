@@ -90,8 +90,12 @@ between these two dates?", got a yes or no (a count of 1 or 0), and narrowed
 the range until one day was left. That took 12 to 41 calls instead of one. They
 usually sent two searches at once (Sonnet, first run: 16 searches in 9 rounds).
 An account has only one creation date, so one search of such a pair was often
-known in advance to come back empty. Haiku got two of five wrong there,
-the only wrong answers in the whole grid. Tool count may not be the cause of
+known in advance to come back empty. Haiku did not reach the answer in two of
+five runs, the only misses in the whole grid. One ended with "2009-06-?? (day
+still to be determined)", the other with "UNKNOWN". Both had run into GitHub's
+search rate limit (7 and 5 error results). Two other Haiku runs hit it too and
+still got through, and Sonnet hit it in one run (3 errors) and finished. The
+workaround costs many calls, and the calls can run into a limit. Tool count may not be the cause of
 the cost difference, because the curated server also differs in descriptions
 and in how it shapes its responses.
 

@@ -34,8 +34,9 @@ What the traces show, in short:
   more per run on the longer task and produced more different call sequences.
 - GitHub's server was cheaper and steadier on the longer task, but has no way to
   look up a user by name. On the short task the models worked around that with a
-  binary search over date ranges, using many more calls, and the smallest model
-  got two of five answers wrong.
+  binary search over date ranges, using many more calls. The smallest model did
+  not reach the answer in two of five runs, after running into GitHub's search
+  rate limit.
 
 ## Limits
 

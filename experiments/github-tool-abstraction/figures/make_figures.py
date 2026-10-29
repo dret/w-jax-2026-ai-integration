@@ -81,7 +81,15 @@ def canvas():
 
 
 def save(fig, name):
-    fig.savefig(os.path.join(OUT, name), dpi=100, facecolor="white")
+    # transparent background, cropped to the drawing with a small margin
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    fig.savefig(buf, dpi=100, transparent=True, format="png")
+    im = Image.open(buf).convert("RGBA")
+    l, t, r, b = im.getchannel("A").point(lambda a: 255 if a else 0).getbbox()
+    pad = 12
+    im.crop((max(l - pad, 0), max(t - pad, 0), min(r + pad, im.width), min(b + pad, im.height))).save(os.path.join(OUT, name))
     plt.close(fig)
     print("wrote", name)
 
