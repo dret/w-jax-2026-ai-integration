@@ -32,6 +32,7 @@ MODELS = ["haiku", "sonnet", "opus"]
 def load_run(path):
     calls, results, answer, cost, ok = [], {}, "", 0.0, False
     order = []
+    msg_of = {}  # tool_use id -> id of the assistant message that issued it (calls in one message run in parallel)
     for line in open(path):
         try:
             e = json.loads(line)
@@ -47,6 +48,7 @@ def load_run(path):
                     name = b.get("name", "?").split("__", 2)[-1]
                     calls.append(name)
                     order.append((b["id"], name, b.get("input") or {}))
+                    msg_of[b["id"]] = m.get("id")
         elif e.get("type") == "user":
             for b in content:
                 if b.get("type") == "tool_result":
@@ -56,7 +58,7 @@ def load_run(path):
             cost = e.get("total_cost_usd") or 0.0
             hits = re.findall(r"^ANSWER:\s*(.+)$", (e.get("result") or ""), re.M)
             answer = hits[-1].strip() if hits else ""
-    return dict(calls=calls, answer=answer, cost=cost, ok=ok, order=order, results=results)
+    return dict(calls=calls, answer=answer, cost=cost, ok=ok, order=order, results=results, msg_of=msg_of)
 
 
 def load_all():
@@ -222,20 +224,25 @@ def fig_price(data):
 # ----------------------------------------------- 5. the binary search -------
 def fig_binary(data):
     run = data[("github", "sonnet", "task-01")][0]
-    rows = []
+    # One row per round: searches issued in the same assistant message ran in parallel,
+    # so they share a row. Reading the rows top to bottom is the real sequence.
+    rounds, n_all, n_rounds = {}, 0, set()
     for tid, name, inp in run["order"]:
         if name != "search_users":
             continue
+        n_all += 1
+        n_rounds.add(run["msg_of"][tid])
         m = re.search(r"created:(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})", str(inp.get("query", "")))
         if not m:
             continue
         res = run["results"].get(tid, ("", False))[0]
         hit = '"total_count":1' in res.replace(" ", "")
-        rows.append((dt.date.fromisoformat(m.group(1)), dt.date.fromisoformat(m.group(2)), hit))
-    n_all = sum(1 for _, nme, _ in run["order"] if nme == "search_users")
+        rounds.setdefault(run["msg_of"][tid], []).append(
+            (dt.date.fromisoformat(m.group(1)), dt.date.fromisoformat(m.group(2)), hit))
+    rows = list(rounds.values())
     d0, d1 = dt.date(2008, 1, 1), dt.date(2009, 12, 31)
     fig, ax = canvas()
-    left, right, top, step = 70, 960, 140, 40
+    left, right, top, step = 70, 960, 140, 68
 
     def px(d):
         return left + (d - d0).days / (d1 - d0).days * (right - left)
@@ -246,16 +253,16 @@ def fig_binary(data):
         ax.text(x + 8, top - 40, str(yr), fontsize=24, color="#777777")
     tx = px(dt.date(2009, 6, 24))
     ax.plot([tx, tx], [top - 25, top + step * len(rows)], color=DARK, lw=2, ls=(0, (4, 4)))
-    for i, (a, b, hit) in enumerate(rows):
+    for i, rnd in enumerate(rows):
         y = top + i * step
-        w = max(px(b) - px(a), 5)
-        ax.add_patch(Rectangle((px(a), y), w, 26, color=GREEN if hit else GREY, lw=0))
+        for a, b, hit in rnd:
+            w = max(px(b) - px(a), 5)
+            ax.add_patch(Rectangle((px(a), y), w, 30, color=GREEN if hit else GREY, lw=0))
     tx0 = 1040
     ax.text(tx0, top + 5, "%d searches" % n_all, fontsize=40, fontweight="bold", color=DARK)
-    ax.text(tx0, top + 70, "to answer one question:\nwhen was this account\ncreated?", fontsize=22, color=DARK, va="top")
-    ax.text(tx0, top + 220, "One lookup would have\ndone it, but this\nserver has none.", fontsize=22, color=DARK, va="top")
-    ax.text(tx0, top + 400, "green: the account is in\nthat date range", fontsize=19, color=GREEN, va="top")
-    ax.text(tx0, top + 465, "grey: it is not", fontsize=19, color="#777777", va="top")
+    ax.text(tx0, top + 75, "%d rounds" % len(n_rounds), fontsize=30, color=DARK, va="top")
+    ax.text(tx0, top + 400, "green: account is in this range", fontsize=19, color=GREEN, va="top")
+    ax.text(tx0, top + 440, "grey: it is not", fontsize=19, color="#777777", va="top")
     ax.text(tx, top + step * len(rows) + 22, "2009-06-24", ha="center", fontsize=22, fontweight="bold", color=DARK)
     save(fig, "binary-search.png")
 

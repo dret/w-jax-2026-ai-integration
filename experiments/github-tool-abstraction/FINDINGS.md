@@ -80,10 +80,17 @@ different: what the model sees, or who decides the sequence of steps.
 **Partly observed.** GitHub's server has far fewer tools and was cheaper and
 steadier on the longer task (2 or 3 distinct paths, 6 to 8 calls, on every
 model). It comes for free. It is not necessarily opinionated the way you would
-want: it has no way to look up a user by name, and its user search does not
-return the creation date. On the short task the models found the date anyway by
-a binary search over date ranges, using user search with a creation-date
-filter, in 12 to 41 calls instead of one. Haiku got two of five wrong there,
+want. Example from the short task: the question needs the date an account was
+created. That information is in the OpenAPI description (`GET /users/{username}`
+returns `created_at`), but none of the server's tools return it (server
+v2.0.2, image built 2026-10-08; its `search_users` tool declares no output at
+all). The user search returns login, id and links, no date. It has a query language though,
+with a `created:` filter. So the models asked "was this account created
+between these two dates?", got a yes or no (a count of 1 or 0), and narrowed
+the range until one day was left. That took 12 to 41 calls instead of one. They
+usually sent two searches at once (Sonnet, first run: 16 searches in 9 rounds).
+An account has only one creation date, so one search of such a pair was often
+known in advance to come back empty. Haiku got two of five wrong there,
 the only wrong answers in the whole grid. Tool count may not be the cause of
 the cost difference, because the curated server also differs in descriptions
 and in how it shapes its responses.
