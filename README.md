@@ -1,5 +1,8 @@
 # What AI Agents Are Teaching Us About Integration
 
+> **Slides for this talk: [dret.net/lectures/wjax-2026](http://dret.net/lectures/wjax-2026/)**
+> The slides link back to this repo, and this repo is the data behind them.
+
 Material behind the talk of the same name (W-JAX Munich and API Conference
 Berlin, November 2026): a small experiment on what happens when a model works
 against a large API, and the argument built around it.
@@ -30,8 +33,8 @@ Claude models, five runs each:
 
 What the traces show, in short:
 
-- The 651 tools worked: all 30 runs were correct. They also cost 5 to 10 times
-  more per run on the longer task and produced more different call sequences.
+- The 651 tools worked: all 30 runs were correct. They also cost 4 to 40 times
+  more per run on the longer task, depending on the model, and produced more different call sequences.
 - GitHub's server was cheaper and steadier on the longer task, but has no way to
   look up a user by name. On the short task the models worked around that with a
   binary search over date ranges, using many more calls. The smallest model did

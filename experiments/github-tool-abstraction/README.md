@@ -30,6 +30,7 @@ argument that were not tested.
 | `mcp/github.json` | Starts GitHub's own MCP server in Docker, read-only. |
 | `run_grid.sh` | Runs both tasks five times against both setups, for the models you name. |
 | `analyze.py` | Summarizes the traces: correct answers, call paths, cost. |
+| `figures/make_figures.py` | Draws the talk's pictures from the traces and writes them into the slides repo. No images are kept here. |
 | `inspect_calls.py` | Prints the arguments and results of each call in one trace. |
 | `traces/` | One file per run. Checked in, because the traces are the evidence. |
 | `spec/` | GitHub's OpenAPI description. Downloaded, not checked in. |

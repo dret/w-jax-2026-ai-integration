@@ -55,12 +55,21 @@ three models. On the short task they took 3 or 4 calls.
 - About 284,000 tokens of tool definitions go to the model with every request.
   Claude Code's usage view attributed about half of the session's usage to the
   generated server and 9% to GitHub's.
-- On the longer task the generated tools cost 5 to 10 times more per run than
-  GitHub's server, on every model.
+- On the longer task the generated tools cost 4 to 40 times more per run than
+  GitHub's server, depending on the model (Opus 4.5 times, Sonnet 11 times,
+  Haiku 40 times).
 - On the longer task the five runs took 3 to 5 distinct paths per model, and
   more calls than the minimum of about six.
 - A stronger model needed fewer calls with the generated tools: Opus 7 to 8,
   Haiku 8 to 12, Sonnet 11 to 14 on task 2. Three models and one task.
+- Cost follows round trips, not calls. Every round trip re-reads the tool
+  definitions from the cache, and several calls can go out in one round trip.
+  On task 2 with the generated tools Sonnet needed about 8 round trips (2.4
+  million cached tokens read) and Opus about 4 (1.1 million). From the reported
+  costs, Opus's price per token is roughly twice Sonnet's, so the two end up at
+  about the same cost, $0.58 and $0.56. With GitHub's server the context is
+  small, the round trips are similar, and Opus costs about twice Sonnet ($0.12
+  and $0.05).
 - When blocked from a shell, Sonnet tried to use one first: one failed `Bash`
   call in each of its five task-2 runs on the generated tools.
 

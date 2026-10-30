@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Draw the talk's pictures straight from the traces.
+"""Draw the experiment's pictures for the talk straight from the traces.
 
-    python3 figures/make_figures.py
+    python3 figures/make_figures.py [output-folder]
 
-Writes PNGs (white background, 1600x900) next to this script. Requires
-matplotlib. Every number in a picture comes from traces/, nothing is typed in.
+The pictures belong to the slides, so no image is kept in this repo. They are written into
+the slides repo (../../../../lectures/wjax-2026/img, next to this repo) unless you name
+another folder. PNGs, transparent background, cropped to the drawing. Requires matplotlib
+and Pillow. Every number in a picture comes from traces/, nothing is typed in.
 """
 import datetime as dt
 import glob
 import json
 import os
 import re
+import sys
 
 import matplotlib
 
@@ -21,16 +24,35 @@ from matplotlib.patches import Rectangle  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRACES = os.path.join(HERE, "..", "traces")
-OUT = HERE
+DEFAULT_OUT = os.path.normpath(os.path.join(HERE, "..", "..", "..", "..", "lectures", "wjax-2026", "img"))
+OUT = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_OUT
 
 GREEN, RED, DARK, GREY, LIGHT = "#78A349", "#C0392B", "#444444", "#B5B5B5", "#E6E6E6"
 ANSWERS = {"task-01": "2 | vilmibm | 2009-06-24", "task-02": "16 | 4"}
 MODELS = ["haiku", "sonnet", "opus"]
 
 
+BLUE = "#4A7FB5"
+
+
+def call_kind(name):
+    """Colour class of a tool call, shared by the lane pictures."""
+    if "user" in name:
+        return "user"
+    if name in ("issueslist_for_repo", "list_issues", "searchissues_and_pull_requests"):
+        return "list"
+    if name in ("issueslist_comments", "issue_read"):
+        return "read"
+    return "other"
+
+
+KIND_COLOR = {"list": DARK, "read": GREEN, "user": BLUE, "other": RED}
+
+
 # ---------------------------------------------------------------- traces ----
 def load_run(path):
     calls, results, answer, cost, ok = [], {}, "", 0.0, False
+    cache_read, turn_ids = 0, set()
     order = []
     msg_of = {}  # tool_use id -> id of the assistant message that issued it (calls in one message run in parallel)
     for line in open(path):
@@ -43,6 +65,7 @@ def load_run(path):
         if not isinstance(content, list):
             content = []
         if e.get("type") == "assistant":
+            turn_ids.add(m.get("id") if isinstance(m, dict) else None)
             for b in content:
                 if b.get("type") == "tool_use":
                     name = b.get("name", "?").split("__", 2)[-1]
@@ -56,9 +79,11 @@ def load_run(path):
         elif e.get("type") == "result":
             ok = not e.get("is_error")
             cost = e.get("total_cost_usd") or 0.0
+            cache_read = (e.get("usage") or {}).get("cache_read_input_tokens", 0)
             hits = re.findall(r"^ANSWER:\s*(.+)$", (e.get("result") or ""), re.M)
             answer = hits[-1].strip() if hits else ""
-    return dict(calls=calls, answer=answer, cost=cost, ok=ok, order=order, results=results, msg_of=msg_of)
+    return dict(calls=calls, answer=answer, cost=cost, ok=ok, order=order, results=results, msg_of=msg_of,
+                cache_read=cache_read, turns=len(turn_ids))
 
 
 def load_all():
@@ -133,71 +158,122 @@ def fig_scale():
             ha="center", va="center", fontsize=24, color=DARK,
             bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=8))
     ax.text(800, 870, "illustrative: one square is one tool", ha="center", fontsize=15, color="#888888")
-    save(fig, "scale.png")
+    save(fig, "scale-651-tools.png")
 
 
-# ------------------------------------------------------ 2. all runs, dots ----
-def fig_dots(data):
-    fig, ax = canvas()
-    rows = [(t, m) for t in ("generated", "github") for m in MODELS]
-    label = {"generated": "651 tools", "github": "GitHub's 26 tools"}
-    names = {"haiku": "Haiku", "sonnet": "Sonnet", "opus": "Opus"}
-    pitch, r = 78, 26
-    colx = {"task-01": 700, "task-02": 1130}
-    ax.text(colx["task-01"] + 2 * pitch, 150, "Task 1: short", ha="center", fontsize=28, fontweight="bold", color=DARK)
-    ax.text(colx["task-02"] + 2 * pitch, 150, "Task 2: longer", ha="center", fontsize=28, fontweight="bold", color=DARK)
-    wrong = total = 0
-    for i, (tools, model) in enumerate(rows):
-        y = 250 + i * 95 + (50 if tools == "github" else 0)
-        ax.text(640, y, "%s · %s" % (label[tools], names[model]), ha="right", va="center", fontsize=24, color=DARK)
-        for task, x0 in colx.items():
-            runs = data.get((tools, model, task), [])
-            for k in range(5):
-                if k < len(runs):
-                    good = runs[k]["ok"] and runs[k]["answer"] == ANSWERS[task]
-                    total += 1
-                    wrong += 0 if good else 1
-                    col = GREEN if good else RED
-                else:
-                    col = LIGHT
-                ax.add_patch(plt.Circle((x0 + k * pitch, y), r, color=col, lw=0))
-    ax.plot([60, 1540], [255 + 3 * 95 + 3 * 95 - 285 + 25] * 2, color="#DDDDDD", lw=1.5) if False else None
-    ax.text(800, 855, "%d runs, %d with a wrong answer. Green is correct." % (total, wrong),
-            ha="center", fontsize=22, color="#666666")
-    save(fig, "all-runs.png")
+# ------------------------- 2. tool set x task, run by run, revealed in three steps ----
+def fig_fit(data):
+    """Sonnet, five runs per group. One lane is one run, one square is one tool call.
+    Columns: tool set. Rows: task. Three versions with identical layout and crop:
+    (1) 651 tools only, (2) plus 26 tools on task 1, (3) everything."""
+    import io
+    import statistics
+    from PIL import Image
+    kinds, kind = KIND_COLOR, call_kind
+
+    cols = [("generated", "651 tools", 230), ("github", "26 tools", 960)]
+    rows = [("task-01", "Task 1", 100, "when was the\nfirst commenter's\naccount created?"),
+            ("task-02", "Task 2", 500, "which of the\nfirst five issues\ngot the most early\ncomments from\nothers?")]
+    pitch, size = 32, 26
+
+    def render(visible):
+        fig, ax = canvas()
+        for tools, title, x0 in cols:
+            if any(v[0] == tools for v in visible):
+                ax.text(x0 + 280, 45, title, ha="center", va="center", fontsize=32, fontweight="bold", color=DARK)
+        for task, rtitle, y0, desc in rows:
+            ax.text(20, y0 + 70, rtitle, ha="left", va="center", fontsize=28, fontweight="bold", color=DARK)
+            ax.text(20, y0 + 100, desc, ha="left", va="top", fontsize=15, color="#777777", linespacing=1.3)
+            for tools, _, x0 in cols:
+                if (tools, task) not in visible:
+                    continue
+                runs = data.get((tools, "sonnet", task), [])[:5]
+                for i, run in enumerate(runs):
+                    y = y0 + 40 + i * 44
+                    for j, name in enumerate(run["calls"]):
+                        ax.add_patch(Rectangle((x0 + j * pitch, y - size / 2), size, size, color=kinds[kind(name)], lw=0))
+                    ax.text(x0 + len(run["calls"]) * pitch + 6, y, "%d" % len(run["calls"]), va="center",
+                            fontsize=18, color="#777777")
+                cost = statistics.median(r["cost"] for r in runs)
+                ax.text(x0, y0 + 40 + 4 * 44 + 48, "$%.2f per run" % cost, va="center", fontsize=26,
+                        fontweight="bold", color=DARK)
+        # key, in the empty space next to the first lanes
+        if ("generated", "task-01") in visible:
+            ky = 135
+            for lbl, col in (("listing issues", DARK), ("reading comments", GREEN),
+                             ("looking up the user", BLUE), ("tried a shell (failed)", RED)):
+                ax.add_patch(Rectangle((480, ky - 13), 26, 26, color=col, lw=0))
+                ax.text(518, ky, lbl, va="center", fontsize=20, color=DARK)
+                ky += 44
+        ax.text(800, 868, "Sonnet, five runs per group. One lane is one run, one square is one tool call, the number is the calls in "
+                "that run. Cost is the median per run (list price).", ha="center", fontsize=15, color="#888888")
+        buf = io.BytesIO()
+        fig.savefig(buf, dpi=100, transparent=True, format="png")
+        plt.close(fig)
+        return Image.open(buf).convert("RGBA")
+
+    full = {(t, k) for t, _, _ in cols for k, _, _, _ in rows}
+    steps = [("fit-1-complexity.png", {("generated", "task-01"), ("generated", "task-02")}),
+             ("fit-2-mismatch.png", {("generated", "task-01"), ("generated", "task-02"), ("github", "task-01")}),
+             ("fit-3-fit.png", full)]
+    images = [(name, render(vis)) for name, vis in steps]
+    l, t, r, b = images[-1][1].getchannel("A").point(lambda a: 255 if a else 0).getbbox()   # crop all alike
+    pad = 12
+    box = (max(l - pad, 0), max(t - pad, 0), min(r + pad, images[-1][1].width), min(b + pad, images[-1][1].height))
+    for name, im in images:
+        im.crop(box).save(os.path.join(OUT, name))
+        print("wrote", name)
 
 
-# ------------------------------------------------- 3. detours, five lanes ----
-def fig_detours(data):
-    fig, ax = canvas()
-    kinds = {"list": DARK, "read": GREEN, "other": RED}
-
-    def kind(name):
-        if name in ("issueslist_for_repo", "list_issues", "searchissues_and_pull_requests"):
-            return "list"
-        if name in ("issueslist_comments", "issue_read"):
-            return "read"
-        return "other"
-
-    panels = [("651 tools", data.get(("generated", "sonnet", "task-02"), []), 150),
-              ("GitHub's 26 tools", data.get(("github", "sonnet", "task-02"), []), 930)]
-    for title, runs, x0 in panels:
-        ax.text(x0 + 300, 120, title, ha="center", fontsize=30, fontweight="bold", color=DARK)
-        for i, run in enumerate(runs[:5]):
-            y = 230 + i * 100
-            ax.text(x0 - 25, y, "run %d" % (i + 1), ha="right", va="center", fontsize=20, color="#777777")
-            for j, name in enumerate(run["calls"]):
-                ax.add_patch(Rectangle((x0 + j * 44, y - 18), 36, 36, color=kinds[kind(name)], lw=0))
-            ax.text(x0 + len(run["calls"]) * 44 + 8, y, "%d" % len(run["calls"]), va="center",
-                    fontsize=20, color="#777777")
-    lx = 300
-    for lbl, col in (("listing issues", DARK), ("reading comments", GREEN), ("tried a shell (failed)", RED)):
-        ax.add_patch(Rectangle((lx, 790), 30, 30, color=col, lw=0))
-        ax.text(lx + 42, 806, lbl, va="center", fontsize=21, color=DARK)
-        lx += 330 if lbl != "reading comments" else 360
-    ax.text(800, 870, "task 2, Sonnet, five runs each; one square is one tool call", ha="center",
-            fontsize=17, color="#888888")
-    save(fig, "detours.png")
+# ------------------------------------- 3. round trips: the context is sent again each time ----
+def fig_roundtrips(data):
+    """Three real runs of task 2, drawn as round trips. A column is one round trip: the squares on
+    top are the tool calls requested in it, the block below is the context sent with it (tool
+    definitions and the conversation so far). Block height is proportional to the measured tokens
+    read from the cache per round trip (warm cache). The last column is the round trip that writes the answer."""
+    import statistics
+    rows = [("generated", "sonnet", "run-3", "Sonnet, 651 tools"),
+            ("generated", "opus", "run-1", "Opus, 651 tools"),
+            ("github", "sonnet", "run-1", "Sonnet, 26 tools")]
+    fig = plt.figure(figsize=(16, 10.5), dpi=100, facecolor="white")
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, 1600)
+    ax.set_ylim(1050, 0)
+    ax.axis("off")
+    col_w, pitch, x0, sq, scale = 92, 112, 400, 22, 100 / 300000.0   # 300,000 tokens = 100 px
+    y_base = {0: 290, 1: 580, 2: 870}                                   # bottom of each row's block
+    for ri, (tools, model, run, label) in enumerate(rows):
+        runs = data[(tools, model, "task-02")]
+        idx = int(run.split("-")[1]) - 1
+        r = runs[idx]
+        groups, seen = [], {}
+        for tid, name, _ in r["order"]:
+            mid = r["msg_of"][tid]
+            if mid not in seen:
+                seen[mid] = len(groups)
+                groups.append([])
+            groups[seen[mid]].append(name)
+        groups.append([])   # the answer
+        tokens = statistics.mean(x["cache_read"] for x in runs) / max(1, statistics.mean(x["turns"] for x in runs))
+        h = max(4, tokens * scale)
+        yb = y_base[ri]
+        cost = statistics.median(x["cost"] for x in runs)
+        ax.text(20, yb - 118, label, fontsize=26, fontweight="bold", color=DARK, va="center")
+        ax.text(20, yb - 80, "%d round trips" % len(groups), fontsize=22, color=DARK, va="center")
+        ax.text(20, yb - 48, "$%.2f per run" % cost, fontsize=22, color=DARK, va="center")
+        for ci, g in enumerate(groups):
+            x = x0 + ci * pitch
+            ax.add_patch(Rectangle((x, yb - h), col_w, h, color=GREY, lw=0))
+            for k, name in enumerate(g):
+                ax.add_patch(Rectangle((x + (col_w - sq) / 2, yb - h - (k + 1) * (sq + 3) - 3), sq, sq,
+                                       color=KIND_COLOR[call_kind(name)], lw=0))
+        tok = "%s tokens each" % ("~{:,}".format(int(round(tokens, -4))) if tokens > 100000 else "~{:,}".format(int(round(tokens, -3))))
+        ax.text(x0 + (len(groups) - 1) * pitch + col_w + 16, yb - max(h / 2, 8), tok, fontsize=19, color="#777777", va="center")
+    for i, line in enumerate(("Each column is one round trip: the tool calls it requested (squares) and the context sent with it (grey).",
+                              "Task 2, one run each. The last column of a row is the round trip that writes the answer.",
+                              "Block height is tokens read from the cache per round trip, with a warm cache. Cost is the median per run (list price).")):
+        ax.text(20, 950 + i * 32, line, fontsize=18, color="#777777", va="center")
+    save(fig, "roundtrips.png")
 
 
 # ----------------------------------------------------------- 4. the price ----
@@ -226,7 +302,7 @@ def fig_price(data):
     fig.text(0.74, 0.47, "284,000", fontsize=48, fontweight="bold", color=DARK)
     fig.text(0.74, 0.41, "tokens of tool\ndefinitions on\nevery request", fontsize=22, color=DARK, va="top")
     fig.text(0.74, 0.20, "with the 651 tools", fontsize=20, color="#777777")
-    save(fig, "price.png")
+    save(fig, "price-per-run.png")
 
 
 # ----------------------------------------------- 5. the binary search -------
@@ -278,7 +354,7 @@ def fig_binary(data):
 if __name__ == "__main__":
     d = load_all()
     fig_scale()
-    fig_dots(d)
-    fig_detours(d)
+    fig_fit(d)
+    fig_roundtrips(d)
     fig_price(d)
     fig_binary(d)
