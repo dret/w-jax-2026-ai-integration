@@ -70,8 +70,20 @@ three models. On the short task they took 3 or 4 calls.
   about the same cost, $0.58 and $0.56. With GitHub's server the context is
   small, the round trips are similar, and Opus costs about twice Sonnet ($0.12
   and $0.05).
+- On task 2 the generated issue listing returned 62,000 to 156,000 characters,
+  more than Claude Code lets a tool result carry. It saved the result to a file
+  and told the model to read it with `jq` or in chunks. This happened in 13 of
+  15 runs (Sonnet 5 of 5, Haiku 5 of 5, Opus 3 of 5) and never with GitHub's
+  server. All runs still got the right answer. The size limit is a property of
+  the harness, not of the API.
 - When blocked from a shell, Sonnet tried to use one first: one failed `Bash`
-  call in each of its five task-2 runs on the generated tools.
+  call in each of its five task-2 runs on the generated tools, right after the
+  response above.
+- The OpenAPI description of the issues endpoint warns that every pull request
+  is also an issue, and the task asked for genuine issues only. **Partly
+  observed**: all 30 runs were correct, so the trap did not bite in this
+  experiment. Whether it would with a model that has not seen GitHub is not
+  tested.
 
 ### 4. At realistic scale this stops being an option
 
