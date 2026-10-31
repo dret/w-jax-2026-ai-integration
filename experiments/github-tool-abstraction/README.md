@@ -42,7 +42,7 @@ read-only GitHub token.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install fastmcp httpx
+.venv/bin/python -m pip install "fastmcp==4.1.4" httpx
 
 mkdir -p spec
 curl -fsSL https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \

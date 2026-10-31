@@ -35,7 +35,9 @@ billed. "Paths" is the number of distinct call sequences among five runs.
 
 The first Sonnet run on the generated tools cost $1.32 and the following ones
 $0.13, because the tool definitions get cached. That is why task 1 averages
-$0.37 for Sonnet.
+$0.37 for Sonnet. The pictures in the talk leave out such cold-cache runs:
+runs that wrote more than twice their group's median of cache tokens. That
+removes the first run of task 1 in five of the six setups and nothing on task 2.
 
 ## The argument, step by step
 
@@ -94,8 +96,11 @@ thousands of tools. 651 is a medium-sized collection, not a large one.
 
 ### 5. There are several techniques for working at scale
 
-They are different approaches, not a ranking, and each one changes something
-different: what the model sees, or who decides the sequence of steps.
+The talk lists five, from easy to more involved: checking APIs for AI
+readiness, improving the descriptions, improving the API designs, selecting or
+searching the tools, and orchestrating tools into AI-friendly designs. Below are
+the ones this experiment touches, with how much evidence there is for each.
+Some change what the model sees, others who decides the sequence of steps.
 
 **A curated server, written by someone else.**
 **Partly observed.** GitHub's server has far fewer tools and was cheaper and
@@ -147,7 +152,7 @@ and exposed to the model as a single tool or API.
 ### 6. You find out which of these you need by watching
 
 **Partly observed.** The binary search above is visible only in the trace; the
-answers were correct. Many repeated calls to one tool with changing arguments
+answers were mostly correct. Many repeated calls to one tool with changing arguments
 look like a sign of a missing capability. This could be a cheap check for any
 agent and API combination, but it is one case so far.
 

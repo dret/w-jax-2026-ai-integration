@@ -11,12 +11,16 @@ against a large API, and the argument built around it.
 
 Developers used to absorb integration problems at design time, by reading
 documentation and asking colleagues. Agents meet the same problems at runtime,
-with neither. The talk looks at four places where they reliably stumble:
-discovery, semantics, composition and errors. What an organisation can do about
-it is a set of different techniques, not a single answer: tools designed by
-someone else, search over the tools, improved descriptions, skills, declarative
-workflows, or code. Which of them fits depends on what you find when you watch
-how agents use your APIs.
+with neither. The talk looks at four places where they stumble: discovery,
+semantics, composition and errors. This small experiment shows some of them,
+the others come from observations that can't be published.
+
+There is no single answer to what an organisation can do about it. The talk
+lists five techniques, from easy to more involved: checking APIs for AI
+readiness, improving the descriptions, improving the API designs, selecting or
+searching the tools, and orchestrating tools into AI-friendly designs (Arazzo
+or other ways). Which of them fits depends on where you are, and on what you
+find when you watch how agents use your APIs.
 
 The full argument is in
 [`experiments/github-tool-abstraction/FINDINGS.md`](experiments/github-tool-abstraction/FINDINGS.md).
@@ -46,7 +50,8 @@ What the traces show, in short:
 One API that is in every model's training data, three models from one vendor,
 five runs per cell and two tasks chosen by one person. The experiment
 illustrates the argument and does not prove it. The tool-count arithmetic and
-every technique listed above beyond GitHub's own server were not tested.
+every technique listed above beyond a hand-picked selection of tools (GitHub's
+own server) were not tested.
 
 ## Layout
 

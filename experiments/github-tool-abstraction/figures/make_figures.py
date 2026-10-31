@@ -52,7 +52,7 @@ KIND_COLOR = {"list": DARK, "read": GREEN, "user": BLUE, "other": RED}
 # ---------------------------------------------------------------- traces ----
 def load_run(path):
     calls, results, answer, cost, ok = [], {}, "", 0.0, False
-    cache_read, turn_ids = 0, set()
+    cache_read, cache_create, turn_ids = 0, 0, set()
     order = []
     msg_of = {}  # tool_use id -> id of the assistant message that issued it (calls in one message run in parallel)
     for line in open(path):
@@ -80,10 +80,22 @@ def load_run(path):
             ok = not e.get("is_error")
             cost = e.get("total_cost_usd") or 0.0
             cache_read = (e.get("usage") or {}).get("cache_read_input_tokens", 0)
+            mu = e.get("modelUsage") or {}
+            cache_create = (sum(v.get("cacheCreationInputTokens", 0) for v in mu.values()) if mu
+                            else (e.get("usage") or {}).get("cache_creation_input_tokens", 0))
             hits = re.findall(r"^ANSWER:\s*(.+)$", (e.get("result") or ""), re.M)
             answer = hits[-1].strip() if hits else ""
     return dict(calls=calls, answer=answer, cost=cost, ok=ok, order=order, results=results, msg_of=msg_of,
-                cache_read=cache_read, turns=len(turn_ids))
+                cache_read=cache_read, cache_create=cache_create, turns=len(turn_ids))
+
+
+def warm(runs):
+    """Leave out cold-cache runs: runs that wrote more than twice the group's median of cache
+    tokens. In these traces that is the first run of task 1 in five of the six setups, where the
+    tool definitions were written to the cache before later runs could read them."""
+    import statistics
+    med = statistics.median(r["cache_create"] for r in runs)
+    return [r for r in runs if r["cache_create"] <= 2 * med] or runs
 
 
 def load_all():
@@ -192,7 +204,7 @@ def fig_fit(data):
                         ax.add_patch(Rectangle((x0 + j * pitch, y - size / 2), size, size, color=kinds[kind(name)], lw=0))
                     ax.text(x0 + len(run["calls"]) * pitch + 6, y, "%d" % len(run["calls"]), va="center",
                             fontsize=18, color="#777777")
-                cost = statistics.median(r["cost"] for r in runs)
+                cost = statistics.mean(r["cost"] for r in warm(runs))
                 ax.text(x0, y0 + 40 + 4 * 44 + 48, "$%.2f per run" % cost, va="center", fontsize=26,
                         fontweight="bold", color=DARK)
         # key, in the empty space next to the first lanes
@@ -203,8 +215,10 @@ def fig_fit(data):
                 ax.add_patch(Rectangle((480, ky - 13), 26, 26, color=col, lw=0))
                 ax.text(518, ky, lbl, va="center", fontsize=20, color=DARK)
                 ky += 44
-        ax.text(800, 868, "Sonnet, five runs per group. One lane is one run, one square is one tool call, the number is the calls in "
-                "that run. Cost is the median per run (list price).", ha="center", fontsize=15, color="#888888")
+        ax.text(800, 858, "Sonnet, five runs per group. One lane is one run, one square is one tool call, the number is the calls in that run.",
+                ha="center", fontsize=15, color="#888888")
+        ax.text(800, 884, "Cost is the average per run (list price), cold-cache runs left out.",
+                ha="center", fontsize=15, color="#888888")
         buf = io.BytesIO()
         fig.savefig(buf, dpi=100, transparent=True, format="png")
         plt.close(fig)
@@ -255,7 +269,7 @@ def fig_roundtrips(data):
         tokens = statistics.mean(x["cache_read"] for x in runs) / max(1, statistics.mean(x["turns"] for x in runs))
         h = max(4, tokens * scale)
         yb = y_base[ri]
-        cost = statistics.median(x["cost"] for x in runs)
+        cost = statistics.mean(x["cost"] for x in warm(runs))
         ax.text(20, yb - 118, label, fontsize=26, fontweight="bold", color=DARK, va="center")
         ax.text(20, yb - 80, "%d round trips" % len(groups), fontsize=22, color=DARK, va="center")
         ax.text(20, yb - 48, "$%.2f per run" % cost, fontsize=22, color=DARK, va="center")
@@ -269,7 +283,7 @@ def fig_roundtrips(data):
         ax.text(x0 + (len(groups) - 1) * pitch + col_w + 16, yb - max(h / 2, 8), tok, fontsize=19, color="#777777", va="center")
     for i, line in enumerate(("Task 2, one run each. The last column of a row is the round trip that writes the answer.",
                               "Each column is one round trip: the tool calls it requested (squares) and the context sent with it (grey).",
-                              "Block height is tokens read from the cache per round trip, with a warm cache. Cost is the median per run (list price).")):
+                              "Block height is cached tokens read per round trip. Cost is the average per run, list price, cold-cache runs left out.")):
         ax.text(20, 950 + i * 32, line, fontsize=18, color="#777777", va="center")
     save(fig, "roundtrips.png")
 
@@ -279,8 +293,8 @@ def fig_price(data):
     fig = plt.figure(figsize=(16, 9), dpi=100, facecolor="white")
     ax = fig.add_axes([0.08, 0.16, 0.62, 0.70])
     names = {"haiku": "Haiku", "sonnet": "Sonnet", "opus": "Opus"}
-    gen = [np.mean([r["cost"] for r in data.get(("generated", m, "task-02"), [])] or [0]) for m in MODELS]
-    git = [np.mean([r["cost"] for r in data.get(("github", m, "task-02"), [])] or [0]) for m in MODELS]
+    gen = [np.mean([r["cost"] for r in warm(data.get(("generated", m, "task-02"), []))] or [0]) for m in MODELS]
+    git = [np.mean([r["cost"] for r in warm(data.get(("github", m, "task-02"), []))] or [0]) for m in MODELS]
     x = np.arange(len(MODELS))
     b1 = ax.bar(x - 0.2, gen, 0.38, color=GREY, label="651 tools")
     b2 = ax.bar(x + 0.2, git, 0.38, color=GREEN, label="GitHub's 26 tools")
@@ -291,7 +305,7 @@ def fig_price(data):
                     ha="center", fontsize=20, color=DARK)
     ax.set_xticks(x)
     ax.set_xticklabels([names[m] for m in MODELS], fontsize=24)
-    ax.set_ylabel("cost per run, task 2 (list price, warm cache)", fontsize=20)
+    ax.set_ylabel("cost per run, task 2 (list price, warm cache only)", fontsize=20)
     ax.tick_params(axis="y", labelsize=16)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
