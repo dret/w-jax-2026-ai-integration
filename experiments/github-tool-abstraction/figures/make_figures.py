@@ -131,7 +131,7 @@ def fig_scale():
     ys = [y0 + r * pitch for _ in range(cols) for r in range(rows)]
     ax.scatter(xs, ys, s=size ** 2, marker="s", color=GREEN, linewidths=0)
     # a large organisation: far more, fading out at the edges
-    bc, br, bx0 = 225, 170, 420
+    bc, br, bx0 = 205, 170, 540
     by0 = 450 - br * pitch / 2
     bxs, bys, al = [], [], []
     for c in range(bc):
@@ -149,7 +149,7 @@ def fig_scale():
     ax.scatter(bxs, bys, s=size ** 2, marker="s", c=colors, linewidths=0)
     ax.text(x0 + cols * pitch / 2, y0 + rows * pitch + 50, "651 capabilities", ha="center",
             fontsize=30, fontweight="bold", color=DARK)
-    ax.text(x0 + cols * pitch / 2, y0 + rows * pitch + 90, "this experiment, as MCP tools", ha="center",
+    ax.text(x0 + cols * pitch / 2, y0 + rows * pitch + 90, "this experiment", ha="center",
             fontsize=20, color=DARK)
     ax.text(bx0 + bc * pitch / 2, 450, "a large organization", ha="center", va="center",
             fontsize=40, fontweight="bold", color=DARK,
