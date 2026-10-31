@@ -122,22 +122,22 @@ def save(fig, name):
 # ------------------------------------------------------------ 1. the scale ---
 def fig_scale():
     fig, ax = canvas()
-    pitch, size = 9, 4.7   # size in points: a square of about 6.5 px on a 9 px pitch
+    pitch, size = 5, 2.6   # same pitch for both blocks, so one square is one capability in both
     # our block: 31 x 21 = 651 squares
     cols, rows = 31, 21
     assert cols * rows == 651
-    x0, y0 = 70, 450 - rows * pitch / 2
+    x0, y0 = 150, 450 - rows * pitch / 2
     xs = [x0 + c * pitch for c in range(cols) for _ in range(rows)]
     ys = [y0 + r * pitch for _ in range(cols) for r in range(rows)]
     ax.scatter(xs, ys, s=size ** 2, marker="s", color=GREEN, linewidths=0)
     # a large organisation: far more, fading out at the edges
-    bc, br, bx0 = 110, 78, 500
+    bc, br, bx0 = 225, 170, 420
     by0 = 450 - br * pitch / 2
     bxs, bys, al = [], [], []
     for c in range(bc):
         for r in range(br):
-            fx = min(c, bc - 1 - c) / 18.0
-            fy = min(r, br - 1 - r) / 12.0
+            fx = min(c, bc - 1 - c) / 32.0
+            fy = min(r, br - 1 - r) / 22.0
             a = max(0.0, min(1.0, fx, fy))
             if a > 0.03:
                 bxs.append(bx0 + c * pitch)
@@ -147,17 +147,16 @@ def fig_scale():
     colors[:, :3] = [0.55, 0.55, 0.55]
     colors[:, 3] = al
     ax.scatter(bxs, bys, s=size ** 2, marker="s", c=colors, linewidths=0)
-    ax.text(x0 + cols * pitch / 2, y0 + rows * pitch + 50, "651 tools", ha="center",
+    ax.text(x0 + cols * pitch / 2, y0 + rows * pitch + 50, "651 capabilities", ha="center",
             fontsize=30, fontweight="bold", color=DARK)
-    ax.text(x0 + cols * pitch / 2, y0 + rows * pitch + 90, "this experiment", ha="center",
+    ax.text(x0 + cols * pitch / 2, y0 + rows * pitch + 90, "this experiment, as MCP tools", ha="center",
             fontsize=20, color=DARK)
     ax.text(bx0 + bc * pitch / 2, 450, "a large organization", ha="center", va="center",
             fontsize=40, fontweight="bold", color=DARK,
             bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=14))
-    ax.text(bx0 + bc * pitch / 2, 512, "thousands to tens of thousands of APIs and tools",
+    ax.text(bx0 + bc * pitch / 2, 512, "thousands to tens of thousands of capabilities",
             ha="center", va="center", fontsize=24, color=DARK,
             bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=8))
-    ax.text(800, 870, "illustrative: one square is one tool", ha="center", fontsize=15, color="#888888")
     save(fig, "scale-651-tools.png")
 
 
@@ -183,7 +182,6 @@ def fig_fit(data):
                 ax.text(x0 + 280, 45, title, ha="center", va="center", fontsize=32, fontweight="bold", color=DARK)
         for task, rtitle, y0, desc in rows:
             ax.text(20, y0 + 70, rtitle, ha="left", va="center", fontsize=28, fontweight="bold", color=DARK)
-            ax.text(20, y0 + 100, desc, ha="left", va="top", fontsize=15, color="#777777", linespacing=1.3)
             for tools, _, x0 in cols:
                 if (tools, task) not in visible:
                     continue
@@ -269,8 +267,8 @@ def fig_roundtrips(data):
                                        color=KIND_COLOR[call_kind(name)], lw=0))
         tok = "%s tokens each" % ("~{:,}".format(int(round(tokens, -4))) if tokens > 100000 else "~{:,}".format(int(round(tokens, -3))))
         ax.text(x0 + (len(groups) - 1) * pitch + col_w + 16, yb - max(h / 2, 8), tok, fontsize=19, color="#777777", va="center")
-    for i, line in enumerate(("Each column is one round trip: the tool calls it requested (squares) and the context sent with it (grey).",
-                              "Task 2, one run each. The last column of a row is the round trip that writes the answer.",
+    for i, line in enumerate(("Task 2, one run each. The last column of a row is the round trip that writes the answer.",
+                              "Each column is one round trip: the tool calls it requested (squares) and the context sent with it (grey).",
                               "Block height is tokens read from the cache per round trip, with a warm cache. Cost is the median per run (list price).")):
         ax.text(20, 950 + i * 32, line, fontsize=18, color="#777777", va="center")
     save(fig, "roundtrips.png")
@@ -293,7 +291,7 @@ def fig_price(data):
                     ha="center", fontsize=20, color=DARK)
     ax.set_xticks(x)
     ax.set_xticklabels([names[m] for m in MODELS], fontsize=24)
-    ax.set_ylabel("cost per run, task 2 (list price)", fontsize=20)
+    ax.set_ylabel("cost per run, task 2 (list price, warm cache)", fontsize=20)
     ax.tick_params(axis="y", labelsize=16)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
